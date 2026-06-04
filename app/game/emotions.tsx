@@ -1,72 +1,32 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { CONFIG_NIVEL, getNivel, salvarProgresso } from '../../config';
+import { CONFIG_NIVEL, getNivel, getTema, salvarProgresso, TEMAS } from '../../config';
 
-// ===== SITUAÇÕES DO JOGO =====
-// cada pergunta tem sua própria situação e áudio correspondente
 const PERGUNTAS = [
-  { 
-    situacao: 'O João ganhou um presente!', 
-    opcoes: ['😢', '😃', '😡', '😨'], 
-    correta: '😃', 
-    audio: require('../../assets/sounds/ttsMP3.O João ganhou um presente!.mp3'),
-  },
-  { 
-    situacao: 'A Maria perdeu seu brinquedo.', 
-    opcoes: ['😃', '😡', '😢', '😲'], 
-    correta: '😢', 
-    audio: require('../../assets/sounds/ttsMP3A Maria perdeu seu brinquedo..mp3'),
-  },
-  { 
-    situacao: 'O Pedro levou um susto!', 
-    opcoes: ['😃', '😢', '😨', '😡'], 
-    correta: '😨', 
-    audio: require('../../assets/sounds/ttsMP3.O Pedro levou um susto!.mp3'),
-  },
-  { 
-    situacao: 'A Ana não conseguiu abrir o pote.', 
-    opcoes: ['😃', '😡', '😢', '😨'], 
-    correta: '😡', 
-    audio: require('../../assets/sounds/ttsMP3.A Ana não conseguiu abrir o pote..mp3'),
-  },
-  { 
-    situacao: 'O Luis viu algo inacreditável!', 
-    opcoes: ['😢', '😃', '😡', '😲'], 
-    correta: '😲', 
-    audio: require('../../assets/sounds/ttsMP3.O Luis viu algo inacreditável.mp3'),
-  },
-  { 
-    situacao: 'A Julia brincou com seu cachorro.', 
-    opcoes: ['😢', '😨', '😡', '😃'], 
-    correta: '😃', 
-    audio: require('../../assets/sounds/ttsMP3.A Julia brincou com seu cachorro..mp3'),
-  },
+  { situacao: 'O João ganhou um presente!', opcoes: ['😢', '😃', '😡', '😨'], correta: '😃', audio: require('../../assets/sounds/ttsMP3.O João ganhou um presente!.mp3') },
+  { situacao: 'A Maria perdeu seu brinquedo.', opcoes: ['😃', '😡', '😢', '😲'], correta: '😢', audio: require('../../assets/sounds/ttsMP3A Maria perdeu seu brinquedo..mp3') },
+  { situacao: 'O Pedro levou um susto!', opcoes: ['😃', '😢', '😨', '😡'], correta: '😨', audio: require('../../assets/sounds/ttsMP3.O Pedro levou um susto!.mp3') },
+  { situacao: 'A Ana não conseguiu abrir o pote.', opcoes: ['😃', '😡', '😢', '😨'], correta: '😡', audio: require('../../assets/sounds/ttsMP3.A Ana não conseguiu abrir o pote..mp3') },
+  { situacao: 'O Luis viu algo inacreditável!', opcoes: ['😢', '😃', '😡', '😲'], correta: '😲', audio: require('../../assets/sounds/ttsMP3.O Luis viu algo inacreditável.mp3') },
+  { situacao: 'A Julia brincou com seu cachorro.', opcoes: ['😢', '😨', '😡', '😃'], correta: '😃', audio: require('../../assets/sounds/ttsMP3.A Julia brincou com seu cachorro..mp3') },
 ];
 
-// ===== NOMES DAS EMOÇÕES =====
 const NOMES: Record<string, string> = {
-  '😃': 'Feliz',
-  '😢': 'Triste',
-  '😡': 'Bravo',
-  '😨': 'Com medo',
-  '😲': 'Surpreso',
+  '😃': 'Feliz', '😢': 'Triste', '😡': 'Bravo', '😨': 'Com medo', '😲': 'Surpreso',
 };
 
-function embaralhar<T>(array: T[]) {
-  return [...array].sort(() => Math.random() - 0.5);
-}
+function embaralhar<T>(array: T[]) { return [...array].sort(() => Math.random() - 0.5); }
 
 function filtrarOpcoes(opcoes: string[], correta: string, qtd: number) {
   const erradas = opcoes.filter(o => o !== correta);
-  const selecionadas = erradas.slice(0, qtd - 1);
-  return embaralhar([...selecionadas, correta]);
+  return embaralhar([...erradas.slice(0, qtd - 1), correta]);
 }
 
 export default function EmotionsGame() {
   const router = useRouter();
-
   const [config, setConfig] = useState(CONFIG_NIVEL[1]);
   const [perguntas, setPerguntas] = useState(PERGUNTAS);
   const [atual, setAtual] = useState(0);
@@ -74,96 +34,71 @@ export default function EmotionsGame() {
   const [acertou, setAcertou] = useState<boolean | null>(null);
   const [acertos, setAcertos] = useState(0);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [somLigado, setSomLigado] = useState(true);
+  const [tema, setTema] = useState(TEMAS.verde);
 
   useEffect(() => {
-    async function carregarNivel() {
+    async function carregar() {
       const nivel = await getNivel();
       const cfg = CONFIG_NIVEL[nivel];
       setConfig(cfg);
       setPerguntas(cfg.embaralhar ? embaralhar(PERGUNTAS) : PERGUNTAS);
+      const som = await AsyncStorage.getItem('som');
+      setSomLigado(som === null ? true : som === 'true');
+      const chave = await getTema();
+      setTema(TEMAS[chave]);
     }
-    carregarNivel();
+    carregar();
   }, []);
 
-  // ===== TOCAR SOM SIMPLES =====
-  // toca um único arquivo de áudio
   async function tocarSom(arquivo: any) {
+    if (!somLigado) return;
     try {
       if (sound) await sound.unloadAsync();
       const { sound: novoSom } = await Audio.Sound.createAsync(arquivo);
       setSound(novoSom);
       await novoSom.playAsync();
-    } catch (e) {
-      console.log('Erro ao tocar som:', e);
-    }
+    } catch (e) { console.log('Erro:', e); }
   }
 
-  // ===== TOCAR SEQUÊNCIA =====
-  // toca a situação primeiro, depois pergunta como a pessoa está se sentindo
   async function tocarSequencia(arquivoSituacao: any) {
+    if (!somLigado) return;
     try {
       if (sound) await sound.unloadAsync();
-
-      // toca a situação primeiro
       const { sound: som1 } = await Audio.Sound.createAsync(arquivoSituacao);
       setSound(som1);
       await som1.playAsync();
-
-      // quando terminar, toca a pergunta
       som1.setOnPlaybackStatusUpdate(async (status) => {
         if (status.isLoaded && status.didJustFinish) {
-          const { sound: som2 } = await Audio.Sound.createAsync(
-            require('../../assets/sounds/ttsMP3.Como ele está se sentindo.mp3')
-          );
+          const { sound: som2 } = await Audio.Sound.createAsync(require('../../assets/sounds/ttsMP3.Como ele está se sentindo.mp3'));
           setSound(som2);
           await som2.playAsync();
         }
       });
-    } catch (e) {
-      console.log('Erro ao tocar sequência:', e);
-    }
+    } catch (e) { console.log('Erro:', e); }
   }
 
-  // libera memória quando sai da tela
-  useEffect(() => {
-    return () => { if (sound) sound.unloadAsync(); };
-  }, [sound]);
-
-  // toca situação + pergunta automaticamente quando muda de pergunta
-  useEffect(() => {
-    if (perguntas.length > 0) tocarSequencia(perguntas[atual].audio);
-  }, [atual, perguntas]);
+  useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
+  useEffect(() => { if (perguntas.length > 0) tocarSequencia(perguntas[atual].audio); }, [atual, perguntas]);
 
   const pergunta = perguntas[atual];
   const opcoesFiltradas = filtrarOpcoes(pergunta.opcoes, pergunta.correta, config.qtdOpcoes);
 
   async function responder(opcao: string) {
     setSelecionada(opcao);
-
     if (opcao === pergunta.correta) {
       const novosAcertos = acertos + 1;
       setAcertos(novosAcertos);
       setAcertou(true);
       await tocarSom(require('../../assets/sounds/ttsMP3.Muito bem.mp3'));
-
       setTimeout(async () => {
-        if (atual + 1 < perguntas.length) {
-          setAtual(atual + 1);
-          setSelecionada('');
-          setAcertou(null);
-        } else {
-          await salvarProgresso('Emoções', novosAcertos, perguntas.length);
-          router.replace('/reward?jogo=emotions' as any);
-        }
+        if (atual + 1 < perguntas.length) { setAtual(atual + 1); setSelecionada(''); setAcertou(null); }
+        else { await salvarProgresso('Emoções', novosAcertos, perguntas.length); router.replace('/reward?jogo=emotions' as any); }
       }, config.tempoFeedback);
-
     } else {
       setAcertou(false);
       await tocarSom(require('../../assets/sounds/ttsMP3.Tente de novo.mp3'));
-      setTimeout(() => {
-        setSelecionada('');
-        setAcertou(null);
-      }, config.tempoFeedback);
+      setTimeout(() => { setSelecionada(''); setAcertou(null); }, config.tempoFeedback);
     }
   }
 
@@ -182,105 +117,49 @@ export default function EmotionsGame() {
   }
 
   return (
-    <View style={styles.container}>
-
-      {/* progresso da sessão */}
-      <Text style={styles.progresso}>{atual + 1} de {perguntas.length}</Text>
+    <View style={[styles.container, { backgroundColor: tema.fundo }]}>
+      <Text style={[styles.progresso, { color: tema.texto }]}>{atual + 1} de {perguntas.length}</Text>
       <View style={styles.barraFundo}>
-        <View style={[styles.barraPreenchida, { width: `${((atual + 1) / perguntas.length) * 100}%` }]} />
+        <View style={[styles.barraPreenchida, { width: `${((atual + 1) / perguntas.length) * 100}%`, backgroundColor: tema.primaria }]} />
       </View>
-
-      {/* caixa com a situação */}
       <View style={styles.situacaoBox}>
         <Text style={styles.situacao}>{pergunta.situacao}</Text>
       </View>
-
-      {/* botão para repetir situação + pergunta */}
-      <TouchableOpacity style={styles.btnAudio} onPress={() => tocarSequencia(pergunta.audio)}>
-        <Text style={styles.btnAudioTexto}>🔊 Ouvir situação</Text>
+      <TouchableOpacity style={[styles.btnAudio, { borderColor: tema.primaria }]} onPress={() => tocarSequencia(pergunta.audio)}>
+        <Text style={[styles.btnAudioTexto, { color: tema.texto }]}>🔊 Ouvir situação</Text>
       </TouchableOpacity>
-
-      {/* feedback após responder */}
       {acertou === true && <Text style={styles.feedbackCerto}>Muito bem!</Text>}
       {acertou === false && <Text style={styles.feedbackErro}>Tente de novo!</Text>}
-
-      {/* grade de emoções filtradas pelo nível TEA */}
       <View style={styles.grade}>
         {opcoesFiltradas.map((opcao) => (
-          <TouchableOpacity
-            key={opcao}
-            style={[styles.opcao, { backgroundColor: corDoBotao(opcao), borderColor: bordaDoBotao(opcao) }]}
-            onPress={() => responder(opcao)}
-            disabled={!!selecionada}
-          >
+          <TouchableOpacity key={opcao} style={[styles.opcao, { backgroundColor: corDoBotao(opcao), borderColor: bordaDoBotao(opcao) }]} onPress={() => responder(opcao)} disabled={!!selecionada}>
             <Text style={styles.emoji}>{opcao}</Text>
             <Text style={styles.nomeEmocao}>{NOMES[opcao]}</Text>
           </TouchableOpacity>
         ))}
       </View>
-
-      <TouchableOpacity style={styles.btnVoltar} onPress={() => router.back()}>
-        <Text style={styles.btnVoltarText}>Voltar</Text>
+      <TouchableOpacity style={[styles.btnVoltar, { borderColor: tema.primaria }]} onPress={() => router.back()}>
+        <Text style={[styles.btnVoltarText, { color: tema.texto }]}>Voltar</Text>
       </TouchableOpacity>
-
     </View>
   );
 }
 
-// ===== ESTILOS =====
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FBEAF0',
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  progresso: { fontSize: 13, color: '#72243E' },
-  barraFundo: { width: '100%', height: 6, backgroundColor: '#F4C0D1', borderRadius: 3 },
-  barraPreenchida: { height: 6, backgroundColor: '#D4537E', borderRadius: 3 },
-  situacaoBox: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#F4C0D1',
-  },
+  container: { flex: 1, padding: 24, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  progresso: { fontSize: 13 },
+  barraFundo: { width: '100%', height: 6, backgroundColor: '#ddd', borderRadius: 3 },
+  barraPreenchida: { height: 6, borderRadius: 3 },
+  situacaoBox: { backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '100%', borderWidth: 1, borderColor: '#F4C0D1' },
   situacao: { fontSize: 18, fontWeight: '600', color: '#72243E', textAlign: 'center', lineHeight: 26 },
-  btnAudio: {
-    backgroundColor: '#fff',
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D4537E',
-    alignItems: 'center',
-    width: '100%',
-  },
-  btnAudioTexto: { fontSize: 14, color: '#72243E', fontWeight: '500' },
-  feedbackCerto: { fontSize: 16, color: '#D4537E', fontWeight: '600' },
+  btnAudio: { backgroundColor: '#fff', padding: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center', width: '100%' },
+  btnAudioTexto: { fontSize: 14, fontWeight: '500' },
+  feedbackCerto: { fontSize: 16, color: '#1D9E75', fontWeight: '600' },
   feedbackErro: { fontSize: 16, color: '#D85A30', fontWeight: '600' },
   grade: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
-  opcao: {
-    width: 130,
-    height: 110,
-    borderRadius: 16,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
+  opcao: { width: 130, height: 110, borderRadius: 16, borderWidth: 2, alignItems: 'center', justifyContent: 'center', gap: 4 },
   emoji: { fontSize: 48 },
   nomeEmocao: { fontSize: 12, fontWeight: '600', color: '#72243E' },
-  btnVoltar: {
-    marginTop: 8,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D4537E',
-    width: '100%',
-    alignItems: 'center',
-  },
-  btnVoltarText: { color: '#72243E', fontWeight: '600' },
+  btnVoltar: { marginTop: 8, padding: 14, borderRadius: 12, borderWidth: 1, width: '100%', alignItems: 'center' },
+  btnVoltarText: { fontWeight: '600' },
 });

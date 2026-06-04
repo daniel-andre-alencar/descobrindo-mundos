@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getTema, salvarTema, TEMAS } from '../config';
 
 const NIVEIS = [
   {
@@ -34,12 +35,27 @@ export default function ParentScreen() {
   const router = useRouter();
   const [nivelSelecionado, setNivelSelecionado] = useState<number>(1);
   const [somLigado, setSomLigado] = useState(true);
+  const [temaSelecionado, setTemaSelecionado] = useState('verde');
   const [salvo, setSalvo] = useState(false);
+
+  // carrega configurações salvas quando a tela abre
+  useEffect(() => {
+    async function carregar() {
+      const nivel = await AsyncStorage.getItem('nivel_tea');
+      if (nivel) setNivelSelecionado(Number(nivel));
+      const som = await AsyncStorage.getItem('som');
+      if (som) setSomLigado(som === 'true');
+      const tema = await getTema();
+      setTemaSelecionado(tema);
+    }
+    carregar();
+  }, []);
 
   async function salvarConfiguracoes() {
     try {
       await AsyncStorage.setItem('nivel_tea', String(nivelSelecionado));
       await AsyncStorage.setItem('som', String(somLigado));
+      await salvarTema(temaSelecionado);
       setSalvo(true);
       setTimeout(() => setSalvo(false), 2000);
     } catch (e) {
@@ -53,6 +69,7 @@ export default function ParentScreen() {
       <Text style={styles.titulo}>Área dos pais</Text>
       <Text style={styles.subtitulo}>Configure o jogo para a criança</Text>
 
+      {/* seleção do nível TEA */}
       <Text style={styles.secaoLabel}>Nível de suporte (TEA)</Text>
       {NIVEIS.map((nivel) => (
         <TouchableOpacity
@@ -72,6 +89,31 @@ export default function ParentScreen() {
         </TouchableOpacity>
       ))}
 
+      {/* seleção do tema de cor */}
+      <Text style={styles.secaoLabel}>Tema de cor do jogo</Text>
+      <Text style={styles.secaoDesc}>Escolha cores que não causem sensibilidade visual no seu filho</Text>
+      <View style={styles.temasGrade}>
+        {Object.entries(TEMAS).map(([chave, tema]) => (
+          <TouchableOpacity
+            key={chave}
+            style={[
+              styles.temaCard,
+              { backgroundColor: tema.fundo, borderColor: tema.primaria },
+              temaSelecionado === chave && { borderWidth: 3 },
+            ]}
+            onPress={() => setTemaSelecionado(chave)}
+          >
+            {/* círculo com a cor primária do tema */}
+            <View style={[styles.temaCirculo, { backgroundColor: tema.primaria }]} />
+            <Text style={[styles.temaNome, { color: tema.texto }]}>{tema.nome}</Text>
+            {temaSelecionado === chave && (
+              <Text style={[styles.temaSelecionado, { color: tema.primaria }]}>✓</Text>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* toggle de som */}
       <Text style={styles.secaoLabel}>Configurações</Text>
       <View style={styles.toggleRow}>
         <Text style={styles.toggleLabel}>Sons do jogo</Text>
@@ -83,16 +125,17 @@ export default function ParentScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* botão para ver o relatório */}
+      {/* botão ver relatório */}
       <TouchableOpacity style={styles.btnRelatorio} onPress={() => router.push('/report')}>
         <Text style={styles.btnRelatorioTexto}>Ver relatório da criança</Text>
       </TouchableOpacity>
 
+      {/* botão salvar */}
       <TouchableOpacity
         style={[styles.btnSalvar, salvo && { backgroundColor: '#085041' }]}
         onPress={salvarConfiguracoes}
       >
-        <Text style={styles.btnSalvarTexto}>{salvo ? 'Salvo!' : 'Salvar configurações'}</Text>
+        <Text style={styles.btnSalvarTexto}>{salvo ? 'Salvo! ✓' : 'Salvar configurações'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.btnVoltar} onPress={() => router.back()}>
@@ -114,11 +157,36 @@ const styles = StyleSheet.create({
   titulo: { fontSize: 22, fontWeight: '700', color: '#0C447C' },
   subtitulo: { fontSize: 14, color: '#185FA5', marginBottom: 8 },
   secaoLabel: { fontSize: 12, fontWeight: '600', color: '#185FA5', letterSpacing: 0.5, marginTop: 8 },
+  secaoDesc: { fontSize: 12, color: '#378ADD', marginTop: -8 },
   nivelCard: { padding: 16, borderRadius: 14, borderWidth: 1.5, gap: 6 },
   nivelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   nivelTitulo: { fontSize: 15, fontWeight: '600' },
   nivelDesc: { fontSize: 13, lineHeight: 18 },
   circulo: { width: 20, height: 20, borderRadius: 10, borderWidth: 2 },
+
+  // grade de temas — 2 colunas
+  temasGrade: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  temaCard: {
+    width: '47%',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  temaCirculo: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  temaNome: { fontSize: 13, fontWeight: '500', flex: 1 },
+  temaSelecionado: { fontSize: 16, fontWeight: '700' },
+
   toggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
