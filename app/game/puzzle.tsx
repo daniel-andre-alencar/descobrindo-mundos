@@ -45,6 +45,8 @@ export default function PuzzleGame() {
   const [palavras, setPalavras] = useState(PALAVRAS);
   const [atual, setAtual] = useState(0);
   const [acertos, setAcertos] = useState(0);
+  // contador de erros da sessão
+  const [erros, setErros] = useState(0);
   const [acertou, setAcertou] = useState<boolean | null>(null);
   const [silabaEscolhida, setSilabaEscolhida] = useState('');
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -100,10 +102,17 @@ export default function PuzzleGame() {
       setTimeout(async () => {
         const novosAcertos = acertos + 1;
         setAcertos(novosAcertos);
-        if (atual + 1 < palavras.length) { setAtual(atual + 1); }
-        else { await salvarProgresso('Sílabas', novosAcertos, palavras.length); router.replace('/reward?jogo=puzzle' as any); }
+        if (atual + 1 < palavras.length) {
+          setAtual(atual + 1);
+        } else {
+          // salva acertos E erros
+          await salvarProgresso('Sílabas', novosAcertos, palavras.length, erros);
+          router.replace('/reward?jogo=puzzle' as any);
+        }
       }, 1200);
     } else {
+      // incrementa erros
+      setErros(e => e + 1);
       setAcertou(false);
       await tocarSom(require('../../assets/sounds/ttsMP3.Tente de novo.mp3'));
       setTimeout(() => { setSilabaEscolhida(''); setAcertou(null); }, 900);

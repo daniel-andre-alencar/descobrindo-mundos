@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { getProgresso, limparProgresso } from '../config';
 
-// tipo de cada entrada do histórico
+// tipo de cada entrada do histórico — agora com erros
 type Entrada = {
   jogo: string;
   acertos: number;
+  erros: number;
   total: number;
   data: string;
   hora: string;
@@ -16,23 +17,22 @@ type Entrada = {
 const CORES: Record<string, string> = {
   'Associação': '#1D9E75',
   'Emoções': '#D4537E',
-  'Quebra-cabeça': '#7F77DD',
+  'Sílabas': '#7F77DD',
 };
 
 export default function ReportScreen() {
   const router = useRouter();
   const [historico, setHistorico] = useState<Entrada[]>([]);
 
-  // carrega o histórico quando a tela abre
   useEffect(() => {
-  getProgresso().then(dados => {
-    console.log('Progresso encontrado:', JSON.stringify(dados));
-    setHistorico(dados);
-  });
-}, []);
+    getProgresso().then(dados => {
+      setHistorico(dados);
+    });
+  }, []);
 
-  // calcula a taxa de acerto geral
+  // totais gerais
   const totalAcertos = historico.reduce((acc, e) => acc + e.acertos, 0);
+  const totalErros = historico.reduce((acc, e) => acc + (e.erros || 0), 0);
   const totalQuestoes = historico.reduce((acc, e) => acc + e.total, 0);
   const taxaGeral = totalQuestoes > 0 ? Math.round((totalAcertos / totalQuestoes) * 100) : 0;
 
@@ -47,7 +47,7 @@ export default function ReportScreen() {
       <Text style={styles.titulo}>Relatório da criança</Text>
       <Text style={styles.subtitulo}>{historico.length} sessões registradas</Text>
 
-      {/* resumo geral */}
+      {/* resumo geral — agora com 4 itens incluindo erros */}
       <View style={styles.resumoBox}>
         <View style={styles.resumoItem}>
           <Text style={styles.resumoNumero}>{historico.length}</Text>
@@ -55,13 +55,19 @@ export default function ReportScreen() {
         </View>
         <View style={styles.resumoDivisor} />
         <View style={styles.resumoItem}>
-          <Text style={styles.resumoNumero}>{totalAcertos}</Text>
+          <Text style={[styles.resumoNumero, { color: '#1D9E75' }]}>{totalAcertos}</Text>
           <Text style={styles.resumoLabel}>acertos</Text>
         </View>
         <View style={styles.resumoDivisor} />
         <View style={styles.resumoItem}>
+          {/* erros em vermelho para chamar atenção */}
+          <Text style={[styles.resumoNumero, { color: '#D85A30' }]}>{totalErros}</Text>
+          <Text style={styles.resumoLabel}>erros</Text>
+        </View>
+        <View style={styles.resumoDivisor} />
+        <View style={styles.resumoItem}>
           <Text style={styles.resumoNumero}>{taxaGeral}%</Text>
-          <Text style={styles.resumoLabel}>taxa geral</Text>
+          <Text style={styles.resumoLabel}>taxa</Text>
         </View>
       </View>
 
@@ -76,12 +82,31 @@ export default function ReportScreen() {
       {/* lista de sessões — mais recente primeiro */}
       {[...historico].reverse().map((entrada, index) => (
         <View key={index} style={[styles.entradaCard, { borderLeftColor: CORES[entrada.jogo] || '#999' }]}>
+
+          {/* cabeçalho com nome do jogo e data */}
           <View style={styles.entradaHeader}>
             <Text style={[styles.entradaJogo, { color: CORES[entrada.jogo] || '#999' }]}>{entrada.jogo}</Text>
             <Text style={styles.entradaData}>{entrada.data} às {entrada.hora}</Text>
           </View>
-          <Text style={styles.entradaAcertos}>{entrada.acertos} de {entrada.total} acertos</Text>
-          {/* barra de acerto da sessão */}
+
+          {/* acertos e erros lado a lado */}
+          <View style={styles.acertosErrosRow}>
+            <View style={styles.acertosBox}>
+              <Text style={styles.acertosNumero}>{entrada.acertos}</Text>
+              <Text style={styles.acertosLabel}>acertos</Text>
+            </View>
+            <View style={styles.errosBox}>
+              {/* erros — mostra 0 se não tiver o campo (sessões antigas) */}
+              <Text style={styles.errosNumero}>{entrada.erros || 0}</Text>
+              <Text style={styles.errosLabel}>erros</Text>
+            </View>
+            <View style={styles.totalBox}>
+              <Text style={styles.totalNumero}>{entrada.total}</Text>
+              <Text style={styles.totalLabel}>total</Text>
+            </View>
+          </View>
+
+          {/* barra de acerto verde */}
           <View style={styles.barraFundo}>
             <View style={[
               styles.barraPreenchida,
@@ -91,10 +116,24 @@ export default function ReportScreen() {
               }
             ]} />
           </View>
+
+          {/* barra de erro vermelha */}
+          {(entrada.erros || 0) > 0 && (
+            <View style={styles.barraFundo}>
+              <View style={[
+                styles.barraPreenchida,
+                {
+                  // calcula porcentagem de erros em relação ao total de tentativas
+                  width: `${((entrada.erros || 0) / ((entrada.erros || 0) + entrada.total)) * 100}%`,
+                  backgroundColor: '#D85A30',
+                }
+              ]} />
+            </View>
+          )}
+
         </View>
       ))}
 
-      {/* botão limpar histórico */}
       {historico.length > 0 && (
         <TouchableOpacity style={styles.btnLimpar} onPress={limpar}>
           <Text style={styles.btnLimparTexto}>Limpar histórico</Text>
@@ -130,8 +169,8 @@ const styles = StyleSheet.create({
     borderColor: '#B5D4F4',
   },
   resumoItem: { alignItems: 'center', gap: 4 },
-  resumoNumero: { fontSize: 24, fontWeight: '700', color: '#0C447C' },
-  resumoLabel: { fontSize: 12, color: '#185FA5' },
+  resumoNumero: { fontSize: 22, fontWeight: '700', color: '#0C447C' },
+  resumoLabel: { fontSize: 11, color: '#185FA5' },
   resumoDivisor: { width: 1, height: 40, backgroundColor: '#B5D4F4' },
   vazioBox: {
     backgroundColor: '#fff',
@@ -156,7 +195,20 @@ const styles = StyleSheet.create({
   entradaHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   entradaJogo: { fontSize: 14, fontWeight: '600' },
   entradaData: { fontSize: 11, color: '#185FA5' },
-  entradaAcertos: { fontSize: 13, color: '#0C447C' },
+  // linha de acertos, erros e total
+  acertosErrosRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  acertosBox: { alignItems: 'center', flex: 1, backgroundColor: '#E1F5EE', borderRadius: 8, padding: 8 },
+  acertosNumero: { fontSize: 20, fontWeight: '700', color: '#1D9E75' },
+  acertosLabel: { fontSize: 11, color: '#0F6E56' },
+  errosBox: { alignItems: 'center', flex: 1, backgroundColor: '#FAECE7', borderRadius: 8, padding: 8 },
+  errosNumero: { fontSize: 20, fontWeight: '700', color: '#D85A30' },
+  errosLabel: { fontSize: 11, color: '#A33A18' },
+  totalBox: { alignItems: 'center', flex: 1, backgroundColor: '#E6F1FB', borderRadius: 8, padding: 8 },
+  totalNumero: { fontSize: 20, fontWeight: '700', color: '#0C447C' },
+  totalLabel: { fontSize: 11, color: '#185FA5' },
   barraFundo: { width: '100%', height: 6, backgroundColor: '#E6F1FB', borderRadius: 3 },
   barraPreenchida: { height: 6, borderRadius: 3 },
   btnLimpar: {

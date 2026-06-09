@@ -1,10 +1,15 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import { CONFIG_NIVEL, getNivel, getTema, salvarProgresso, TEMAS } from '../../config';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { CONFIG_NIVEL, getNivel, salvarProgresso } from '../../config';
 
 const PERGUNTAS = [
   { pergunta: 'Qual animal late?', opcoes: ['🐱', '🐶', '🐢', '🐟'], correta: '🐶', audio: require('../../assets/sounds/ttsMP3.Qual animal late.mp3') },
@@ -23,34 +28,69 @@ function filtrarOpcoes(opcoes: string[], correta: string, qtd: number) {
   return embaralhar([...selecionadas, correta]);
 }
 
+// ===== BOTÃO ANIMADO =====
 function BotaoAnimado({ opcao, onPress, cor, borda, disabled }: {
-  opcao: string; onPress: () => void; cor: string; borda: string; disabled: boolean;
+  opcao: string;
+  onPress: () => void;
+  cor: string;
+  borda: string;
+  disabled: boolean;
 }) {
   const escala = useSharedValue(1);
-  const estiloAnimado = useAnimatedStyle(() => ({ transform: [{ scale: escala.value }] }));
+
+  const estiloAnimado = useAnimatedStyle(() => ({
+    transform: [{ scale: escala.value }],
+  }));
 
   function aoTocar() {
-    escala.value = withSequence(withTiming(0.85, { duration: 100 }), withSpring(1, { damping: 4 }));
+    escala.value = withSequence(
+      withTiming(0.85, { duration: 100 }),
+      withSpring(1, { damping: 4 })
+    );
     onPress();
   }
 
   return (
     <Animated.View style={estiloAnimado}>
-      <TouchableOpacity style={[styles.opcao, { backgroundColor: cor, borderColor: borda }]} onPress={aoTocar} disabled={disabled}>
+      <TouchableOpacity
+        style={[styles.opcao, { backgroundColor: cor, borderColor: borda }]}
+        onPress={aoTocar}
+        disabled={disabled}
+      >
         <Text style={styles.emoji}>{opcao}</Text>
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
-function FeedbackAnimado({ visivel, texto, cor }: { visivel: boolean; texto: string; cor: string }) {
+// ===== FEEDBACK ANIMADO =====
+function FeedbackAnimado({ visivel, texto, cor }: {
+  visivel: boolean;
+  texto: string;
+  cor: string;
+}) {
   const escala = useSharedValue(0);
+
   useEffect(() => {
-    escala.value = visivel ? withSpring(1, { damping: 4 }) : 0;
+    if (visivel) {
+      escala.value = withSpring(1, { damping: 4 });
+    } else {
+      escala.value = 0;
+    }
   }, [visivel]);
-  const estiloAnimado = useAnimatedStyle(() => ({ transform: [{ scale: escala.value }], opacity: escala.value }));
+
+  const estiloAnimado = useAnimatedStyle(() => ({
+    transform: [{ scale: escala.value }],
+    opacity: escala.value,
+  }));
+
   if (!visivel) return null;
-  return <Animated.View style={estiloAnimado}><Text style={[styles.feedback, { color: cor }]}>{texto}</Text></Animated.View>;
+
+  return (
+    <Animated.View style={estiloAnimado}>
+      <Text style={[styles.feedback, { color: cor }]}>{texto}</Text>
+    </Animated.View>
+  );
 }
 
 export default function AssociationGame() {
@@ -60,63 +100,88 @@ export default function AssociationGame() {
   const [atual, setAtual] = useState(0);
   const [selecionada, setSelecionada] = useState('');
   const [acertou, setAcertou] = useState<boolean | null>(null);
+  // contador de acertos da sessão
   const [acertos, setAcertos] = useState(0);
+  // contador de erros da sessão
+  const [erros, setErros] = useState(0);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [somLigado, setSomLigado] = useState(true);
-  const [tema, setTema] = useState(TEMAS.verde);
 
+  // animação da barra de progresso
   const larguraBarra = useSharedValue(0);
-  const estiloBarra = useAnimatedStyle(() => ({ width: `${larguraBarra.value}%` }));
+  const estiloBarra = useAnimatedStyle(() => ({
+    width: `${larguraBarra.value}%`,
+  }));
 
   useEffect(() => {
-    async function carregar() {
+    async function carregarNivel() {
       const nivel = await getNivel();
       const cfg = CONFIG_NIVEL[nivel];
       setConfig(cfg);
       setPerguntas(cfg.embaralhar ? embaralhar(PERGUNTAS) : PERGUNTAS);
-      const som = await AsyncStorage.getItem('som');
-      setSomLigado(som === null ? true : som === 'true');
-      const chave = await getTema();
-      setTema(TEMAS[chave]);
     }
-    carregar();
+    carregarNivel();
   }, []);
 
+  // atualiza barra de progresso com animação
   useEffect(() => {
-    larguraBarra.value = withTiming(((atual + 1) / PERGUNTAS.length) * 100, { duration: 400 });
+    larguraBarra.value = withTiming(
+      ((atual + 1) / PERGUNTAS.length) * 100,
+      { duration: 400 }
+    );
   }, [atual]);
 
   async function tocarSom(arquivo: any) {
-    if (!somLigado) return;
     try {
       if (sound) await sound.unloadAsync();
       const { sound: novoSom } = await Audio.Sound.createAsync(arquivo);
       setSound(novoSom);
       await novoSom.playAsync();
-    } catch (e) { console.log('Erro:', e); }
+    } catch (e) {
+      console.log('Erro ao tocar som:', e);
+    }
   }
 
-  useEffect(() => { return () => { if (sound) sound.unloadAsync(); }; }, [sound]);
-  useEffect(() => { if (perguntas.length > 0) tocarSom(perguntas[atual].audio); }, [atual, perguntas]);
+  useEffect(() => {
+    return () => { if (sound) sound.unloadAsync(); };
+  }, [sound]);
+
+  useEffect(() => {
+    if (perguntas.length > 0) tocarSom(perguntas[atual].audio);
+  }, [atual, perguntas]);
 
   const pergunta = perguntas[atual];
   const opcoesFiltradas = filtrarOpcoes(pergunta.opcoes, pergunta.correta, config.qtdOpcoes);
 
   async function responder(opcao: string) {
     setSelecionada(opcao);
+
     if (opcao === pergunta.correta) {
       const novosAcertos = acertos + 1;
       setAcertos(novosAcertos);
       setAcertou(true);
       await tocarSom(require('../../assets/sounds/ttsMP3.Muito bem.mp3'));
+
       setTimeout(async () => {
-        if (atual + 1 < perguntas.length) { setAtual(atual + 1); setSelecionada(''); setAcertou(null); }
-        else { await salvarProgresso('Associação', novosAcertos, perguntas.length); router.replace('/reward?jogo=association' as any); }
+        if (atual + 1 < perguntas.length) {
+          setAtual(atual + 1);
+          setSelecionada('');
+          setAcertou(null);
+        } else {
+          // salva acertos E erros no relatório
+          await salvarProgresso('Associação', novosAcertos, perguntas.length, erros);
+          router.replace('/reward?jogo=association' as any);
+        }
       }, config.tempoFeedback);
+
     } else {
+      // incrementa erros quando erra
+      setErros(erros + 1);
       setAcertou(false);
       await tocarSom(require('../../assets/sounds/ttsMP3.Tente de novo.mp3'));
-      setTimeout(() => { setSelecionada(''); setAcertou(null); }, config.tempoFeedback);
+      setTimeout(() => {
+        setSelecionada('');
+        setAcertou(null);
+      }, config.tempoFeedback);
     }
   }
 
@@ -135,41 +200,72 @@ export default function AssociationGame() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: tema.fundo }]}>
-      <Text style={[styles.progresso, { color: tema.texto }]}>{atual + 1} de {perguntas.length}</Text>
+    <View style={styles.container}>
+
+      <Text style={styles.progresso}>{atual + 1} de {perguntas.length}</Text>
+
+      {/* barra de progresso animada */}
       <View style={styles.barraFundo}>
-        <Animated.View style={[styles.barraPreenchida, estiloBarra, { backgroundColor: tema.primaria }]} />
+        <Animated.View style={[styles.barraPreenchida, estiloBarra]} />
       </View>
-      <TouchableOpacity style={[styles.btnAudio, { borderColor: tema.primaria }]} onPress={() => tocarSom(pergunta.audio)}>
-        <Text style={[styles.btnAudioTexto, { color: tema.texto }]}>🔊 Ouvir pergunta</Text>
+
+      <TouchableOpacity style={styles.btnAudio} onPress={() => tocarSom(pergunta.audio)}>
+        <Text style={styles.btnAudioTexto}>🔊 Ouvir pergunta</Text>
       </TouchableOpacity>
-      <Text style={[styles.pergunta, { color: tema.texto }]}>{pergunta.pergunta}</Text>
+
+      <Text style={styles.pergunta}>{pergunta.pergunta}</Text>
+
       <FeedbackAnimado visivel={acertou === true} texto="Muito bem! ⭐" cor="#1D9E75" />
       <FeedbackAnimado visivel={acertou === false} texto="Tente de novo!" cor="#D85A30" />
+
       <View style={styles.grade}>
         {opcoesFiltradas.map((opcao) => (
-          <BotaoAnimado key={opcao} opcao={opcao} onPress={() => responder(opcao)} cor={corDoBotao(opcao)} borda={bordaDoBotao(opcao)} disabled={!!selecionada} />
+          <BotaoAnimado
+            key={opcao}
+            opcao={opcao}
+            onPress={() => responder(opcao)}
+            cor={corDoBotao(opcao)}
+            borda={bordaDoBotao(opcao)}
+            disabled={!!selecionada}
+          />
         ))}
       </View>
-      <TouchableOpacity style={[styles.btnVoltar, { borderColor: tema.primaria }]} onPress={() => router.back()}>
-        <Text style={[styles.btnVoltarText, { color: tema.texto }]}>Voltar</Text>
+
+      <TouchableOpacity style={styles.btnVoltar} onPress={() => router.back()}>
+        <Text style={styles.btnVoltarText}>Voltar</Text>
       </TouchableOpacity>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, alignItems: 'center', justifyContent: 'center', gap: 16 },
-  progresso: { fontSize: 13 },
-  barraFundo: { width: '100%', height: 6, backgroundColor: '#ddd', borderRadius: 3 },
-  barraPreenchida: { height: 6, borderRadius: 3 },
-  btnAudio: { backgroundColor: '#fff', padding: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center', width: '100%' },
-  btnAudioTexto: { fontSize: 14, fontWeight: '500' },
-  pergunta: { fontSize: 22, fontWeight: '700', textAlign: 'center' },
+  container: {
+    flex: 1,
+    backgroundColor: '#E1F5EE',
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  progresso: { fontSize: 13, color: '#0F6E56' },
+  barraFundo: { width: '100%', height: 6, backgroundColor: '#9FE1CB', borderRadius: 3, overflow: 'hidden' },
+  barraPreenchida: { height: 6, backgroundColor: '#1D9E75', borderRadius: 3 },
+  btnAudio: {
+    backgroundColor: '#fff',
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1D9E75',
+    alignItems: 'center',
+    width: '100%',
+  },
+  btnAudioTexto: { fontSize: 14, color: '#085041', fontWeight: '500' },
+  pergunta: { fontSize: 22, fontWeight: '700', color: '#085041', textAlign: 'center' },
   feedback: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   grade: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
   opcao: { width: 120, height: 120, borderRadius: 16, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   emoji: { fontSize: 52 },
-  btnVoltar: { marginTop: 8, padding: 14, borderRadius: 12, borderWidth: 1, width: '100%', alignItems: 'center' },
-  btnVoltarText: { fontWeight: '600' },
+  btnVoltar: { marginTop: 8, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#1D9E75', width: '100%', alignItems: 'center' },
+  btnVoltarText: { color: '#085041', fontWeight: '600' },
 });

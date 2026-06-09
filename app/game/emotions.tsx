@@ -33,6 +33,8 @@ export default function EmotionsGame() {
   const [selecionada, setSelecionada] = useState('');
   const [acertou, setAcertou] = useState<boolean | null>(null);
   const [acertos, setAcertos] = useState(0);
+  // contador de erros da sessão
+  const [erros, setErros] = useState(0);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [somLigado, setSomLigado] = useState(true);
   const [tema, setTema] = useState(TEMAS.verde);
@@ -92,10 +94,17 @@ export default function EmotionsGame() {
       setAcertou(true);
       await tocarSom(require('../../assets/sounds/ttsMP3.Muito bem.mp3'));
       setTimeout(async () => {
-        if (atual + 1 < perguntas.length) { setAtual(atual + 1); setSelecionada(''); setAcertou(null); }
-        else { await salvarProgresso('Emoções', novosAcertos, perguntas.length); router.replace('/reward?jogo=emotions' as any); }
+        if (atual + 1 < perguntas.length) {
+          setAtual(atual + 1); setSelecionada(''); setAcertou(null);
+        } else {
+          // salva acertos E erros
+          await salvarProgresso('Emoções', novosAcertos, perguntas.length, erros);
+          router.replace('/reward?jogo=emotions' as any);
+        }
       }, config.tempoFeedback);
     } else {
+      // incrementa erros
+      setErros(e => e + 1);
       setAcertou(false);
       await tocarSom(require('../../assets/sounds/ttsMP3.Tente de novo.mp3'));
       setTimeout(() => { setSelecionada(''); setAcertou(null); }, config.tempoFeedback);
@@ -132,7 +141,12 @@ export default function EmotionsGame() {
       {acertou === false && <Text style={styles.feedbackErro}>Tente de novo!</Text>}
       <View style={styles.grade}>
         {opcoesFiltradas.map((opcao) => (
-          <TouchableOpacity key={opcao} style={[styles.opcao, { backgroundColor: corDoBotao(opcao), borderColor: bordaDoBotao(opcao) }]} onPress={() => responder(opcao)} disabled={!!selecionada}>
+          <TouchableOpacity
+            key={opcao}
+            style={[styles.opcao, { backgroundColor: corDoBotao(opcao), borderColor: bordaDoBotao(opcao) }]}
+            onPress={() => responder(opcao)}
+            disabled={!!selecionada}
+          >
             <Text style={styles.emoji}>{opcao}</Text>
             <Text style={styles.nomeEmocao}>{NOMES[opcao]}</Text>
           </TouchableOpacity>
